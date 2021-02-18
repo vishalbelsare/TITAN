@@ -1,5 +1,5 @@
 model:
-  num_pop: 6825
+  num_pop: 6500
   time:
     num_steps: 84
     steps_per_year: 12
@@ -12,6 +12,7 @@ features:
   prep: true
   high_risk: false
   haart: true
+  die_and_replace: true
 
 classes:
   drug_types:
