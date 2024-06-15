@@ -13,15 +13,17 @@ from . import utils
 from . import agent as ag
 
 
-def setup_aggregates(params: ObjMap, reportables, classes: List[str]) -> Dict:
+def setup_aggregates(
+    params: ObjMap, reportables, classes: List[str], exits: Dict[str, List["ag.Agent"]]
+) -> Dict:
     """
     Recursively create a nested dictionary of attribute values to items to count.
 
     Attributes are classes defined in params, the items counted are:
 
     * "agents"
-    * "deaths"
-    * "deaths_hiv"
+    * "[exit_class]_hiv"
+    * exit by exit class
 
     Additionally, any feature enabled may have additional stats that are tracked.  See the feature's `stats` attribute.
 
@@ -35,9 +37,10 @@ def setup_aggregates(params: ObjMap, reportables, classes: List[str]) -> Dict:
     if classes == []:
         base_stats = {
             "agents": 0,
-            "deaths": 0,
-            "deaths_hiv": 0,
         }
+        for exit in params.classes.exit.keys():
+            base_stats[exit] = 0
+            base_stats[exit + "_hiv"] = 0
 
         for reportable in reportables:
             base_stats.update({stat: 0 for stat in reportable.stats})
@@ -49,7 +52,7 @@ def setup_aggregates(params: ObjMap, reportables, classes: List[str]) -> Dict:
     keys = [k for k in params.classes[clss]]
 
     for key in keys:
-        stats[key] = setup_aggregates(params, reportables, rem_clss)
+        stats[key] = setup_aggregates(params, reportables, rem_clss, exits)
 
     return stats
 
@@ -120,7 +123,7 @@ def add_agent_to_stats(stats_item: Dict[str, int], key: str):
 
 def get_stats(
     all_agents: "ag.AgentSet",
-    deaths: List["ag.Agent"],
+    exits: Dict[str, List["ag.Agent"]],
     params: ObjMap,
     exposures,
     features,
@@ -132,14 +135,14 @@ def get_stats(
     args:
         all_agents: all of the agents in the population
         new_hiv.dx: agents who are newly diagnosed with hiv this timestep
-        deaths: agents who died this timestep
+        exits: dictionary indicated how many agents exited by exit class this timestep
         params: model parameters
 
     returns:
         nested dictionary of agent attributes to counts of various items
     """
     reportables = exposures + features
-    stats = setup_aggregates(params, reportables, params.outputs.classes)
+    stats = setup_aggregates(params, reportables, params.outputs.classes, exits)
 
     # attribute names (non-plural)
     attrs = [clss[:-1] for clss in params.outputs.classes]
@@ -153,11 +156,12 @@ def get_stats(
             agent_feature = getattr(a, reportable.name)
             agent_feature.set_stats(stats_item, time)
 
-    for a in deaths:
-        stats_item = get_stats_item(stats, attrs, a)
-        add_agent_to_stats(stats_item, "deaths")
-        if a.hiv.active:  # type: ignore[attr-defined]
-            add_agent_to_stats(stats_item, "deaths_hiv")
+    for exit in exits:
+        for a in exits[exit]:
+            stats_item = get_stats_item(stats, attrs, a)
+            add_agent_to_stats(stats_item, exit)
+            if a.hiv.active:  # type: ignore[attr-defined]
+                add_agent_to_stats(stats_item, exit + "_hiv")
 
     return stats
 
@@ -243,8 +247,8 @@ def basicReport(
     Standard report writer for basic agent statistics, columns include:
 
     * "agents": number of agents in the population
-    * "deaths": number of agents who died this time period
-    * "deaths_hiv": number of agents with HIV who died this time period
+    * "[exit]": number of agents who exited this time period by exit class
+    * "[exit]_hiv": number of agents with HIV who exited this time period by exit class
 
     Additionally, any feature enabled may have additional stats that are tracked.  See the feature's `stats` attribute and docs for details.
     """
@@ -292,20 +296,31 @@ def print_components(
     # if this is a new file, write the header info
     if f.tell() == 0:
         f.write(
-            "run_id\trunseed\tpopseed\tt\tcomponent"
+            "run_id\trunseed\tpopseed\tt\tcomponent\tagents"
+            "\tinfected\ttrt\ttrtinfected"
             "\tdensity\tEffectiveSize\tdeg_cent\n"
         )
 
-    for (id, comp) in enumerate(components):
+    for id, comp in enumerate(components):
         num_nodes = comp.number_of_nodes()
 
         average_size = effective_size(comp) / num_nodes
         comp_density = nx.density(comp)
 
         deg_cent = mean(list(nx.degree_centrality(comp).values()))
+        nhiv = ntrthiv = ntrt = 0
+        for agent in comp.nodes():
+            if agent.hiv.active:
+                nhiv += 1
+                if agent.random_trial.treated:
+                    ntrthiv += 1
+
+            if agent.random_trial.treated:
+                ntrt += 1
 
         f.write(
-            f"{run_id}\t{runseed}\t{popseed}\t{t}\t{id}\t"
+            f"{run_id}\t{runseed}\t{popseed}\t{t}\t{id}\t{num_nodes}"
+            f"\t{nhiv}\t{ntrt}\t{ntrthiv}"
             f"\t{comp_density:.4f}"
             f"\t{average_size:.4f}\t{deg_cent}\n"
         )
@@ -354,6 +369,8 @@ def write_network_stats(graph, path: str, id, time):
     tot_nodes = 0
     for c in components:
         tot_nodes += c.number_of_nodes()
+
+    outfile.write(f"Number of nodes: {tot_nodes}\n")
 
     outfile.write(
         "Average component size: {}\n".format(

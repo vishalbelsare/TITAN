@@ -13,6 +13,7 @@ from titan.parse_params import ObjMap, create_params
 from titan.model import TITAN
 from titan.run_titan import script_init
 
+
 # overwrite
 @pytest.fixture
 def params_integration(tmpdir):
@@ -103,8 +104,9 @@ def test_model_reproducible(tmpdir):
         assert res_a[i]["pseed"] == res_b[i]["pseed"]
         assert res_a[i]["agents"] == res_b[i]["agents"]
         assert res_a[i]["hiv"] == res_b[i]["hiv"]
+        assert res_a[i]["monkeypox"] == res_b[i]["monkeypox"]
         assert res_a[i]["prep"] == res_b[i]["prep"]
-        assert res_a[i]["deaths"] == res_b[i]["deaths"]
+        assert res_a[i]["death"] == res_b[i]["death"]
         assert res_a[i]["hiv_aids"] == res_b[i]["hiv_aids"]
 
 
@@ -176,7 +178,9 @@ def test_agent_pop_stable_setting(tmpdir):
             os.path.dirname(os.path.abspath(__file__)), "..", "titan", "settings"
         )
     ):
-        if "__" not in item and item != "base":
+        if (
+            "__" not in item and item != "base" and item != "philly-gis"
+        ):  # bypass philly due to constraints
             path = tmpdir.mkdir(item)
             os.mkdir(os.path.join(path, "network"))
             print(f"-----------Starting run for {item}-----------")
@@ -410,6 +414,39 @@ def test_static_network(make_model_integration, tmpdir):
 
 
 @pytest.mark.integration_deterministic
+def test_dissolution(params_integration, tmpdir):
+    model = TITAN(params_integration)
+    inj_r = 0
+    for rel in model.pop.relationships:
+        inj_r += 1
+    assert inj_r > 0
+    model.time = 1
+
+    model.params.partnership.dissolve.time = 1
+    model.params.partnership.dissolve.enabled = True
+
+    model.params.demographics.white.sex_type.MSM.drug_type.Inj.num_partners = (
+        model.params.demographics.black.sex_type.MSM.drug_type.Inj.num_partners
+    )
+    for agent in model.pop.all_agents:
+        agent.mean_num_partners["Inj"] = -1
+        agent.mean_num_partners["Sex"] = -1
+        agent.mean_num_partners["SexInj"] = -1
+        agent.mean_num_partners["Social"] = -1
+    model.pop.update_partner_targets()
+
+    model.step(tmpdir)
+
+    for rel in model.pop.relationships:
+        if rel.bond_type == "Inj":
+            print(rel.agent1.mean_num_partners)
+            print(rel.agent2.mean_num_partners)
+            print(rel.agent1.race, rel.agent1.sex_type, rel.agent1.drug_type)
+            print(rel.agent2.race, rel.agent2.sex_type, rel.agent2.drug_type)
+        assert rel.bond_type != "Inj"
+
+
+@pytest.mark.integration_deterministic
 def test_incar(params_integration, tmpdir):
     # turn on incar - initi is set to 0, so for these purposes, just run time
     params_integration.features.incar = True
@@ -531,7 +568,7 @@ def test_treatment_cascade(params_integration, tmpdir):
     path_b = tmpdir.mkdir("b")
     path_b.mkdir("network")
 
-    params_integration.features.die_and_replace = True
+    params_integration.features.exit_enter = True
     params_integration.model.num_pop = 1000
     params_integration.model.time.num_steps = 20
 
@@ -545,7 +582,7 @@ def test_treatment_cascade(params_integration, tmpdir):
         while model.time < model.params.model.time.num_steps:
             model.time += 1
             model.step(path)
-            deaths |= set(a.id for a in model.deaths)
+            deaths |= set(a.id for a in model.exits["death"])
             unique_hiv |= set(
                 a.id
                 for a in model.pop.all_agents

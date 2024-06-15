@@ -57,7 +57,6 @@ class Agent:
         # agent properties
         self.sex_type = sex_type
         self.age = age
-        self.age_bin = 0
         self.race = race
         self.drug_type = drug_use
         self.location = location
@@ -89,7 +88,7 @@ class Agent:
         """
         return (
             f"\t{self.id}\t{self.age}\t{self.sex_type}\t{self.drug_type}\t"  # type: ignore[attr-defined]
-            f"{self.race}\t{self.hiv.active}"  # type: ignore[attr-defined]
+            f"{self.race}\t{self.hiv.active}\t{self.prep.active}"  # type: ignore[attr-defined]
         )
 
     def __repr__(self) -> str:
@@ -109,6 +108,15 @@ class Agent:
 
     def __hash__(self) -> int:
         return self.id
+
+    @property
+    def age_bin(self):
+        for key, val in self.location.params.classes.age_bins.items():
+            if self.age >= val.min_age and self.age <= val.max_age:
+                return key
+        raise ValueError(
+            f"Agent age ({self.age}) must be within an age bin [params.classes.age_bins]"
+        )
 
     def iter_partners(self) -> Iterator["Agent"]:
         """

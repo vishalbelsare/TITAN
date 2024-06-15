@@ -54,7 +54,7 @@ classes:
 features:
   prep: true
   haart: true
-  die_and_replace: true
+  exit_enter: true
   assort_mix: true
 
 outputs:
