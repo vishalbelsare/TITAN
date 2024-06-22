@@ -7,10 +7,10 @@ from .. import utils
 from .. import agent
 from .. import population
 from .. import model
+from ..distributions import poisson
 
 
 class HighRisk(base_feature.BaseFeature):
-
     name = "high_risk"
     stats = [
         "high_risk_new",
@@ -75,7 +75,6 @@ class HighRisk(base_feature.BaseFeature):
 
             # incarcerated last step, evaluate agent's partners for high risk
             elif self.agent.incar.time == model.time - 1:  # type: ignore[attr-defined]
-
                 # put partners in high risk
                 for partner in self.agent.get_partners(
                     self.agent.location.params.high_risk.partnership_types
@@ -129,7 +128,7 @@ class HighRisk(base_feature.BaseFeature):
     # ============== HELPER METHODS ================
 
     def become_high_risk(
-        self, pop: "population.Population", time: int, duration: int = None
+        self, pop: "population.Population", time: int, duration: Optional[int] = None
     ):
         """
         Mark an agent as high risk and assign a duration to their high risk period
@@ -170,7 +169,7 @@ class HighRisk(base_feature.BaseFeature):
         """
         for bond in self.agent.location.params.high_risk.partnership_types:
             self.agent.mean_num_partners[bond] += amount  # could be negative
-            self.agent.target_partners[bond] = utils.poisson(
-                self.agent.mean_num_partners[bond], pop.np_random
+            self.agent.target_partners[bond] = poisson(
+                pop.np_random, self.agent.mean_num_partners[bond]
             )
             pop.update_partnerability(self.agent)

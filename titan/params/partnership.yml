@@ -139,16 +139,16 @@ partnership:
               min: 0.0
               max: 1.0
             min:
-              type: float
-              min: 0.0
+              type: int
+              min: 0
             max:
-              type: float
-              min: 0.0
+              type: int
+              min: 0
           default:
             1:
               prob: 1.0
-              min: 0.0
-              max: 0.0
+              min: 0
+              max: 0
         distribution:
           dist_type:
             type: enum
@@ -258,3 +258,10 @@ partnership:
         description: Probability that for a given partnering attempt, the agent tries to partner with only other agents in their component. Otherwise, the agent tries to partner with agents from any component.  Network must be enabled.
         min: 0
         max: 1
+  dissolve:
+    time:
+      type: int
+      default: -9999
+    enabled:
+      type: bool
+      default: false

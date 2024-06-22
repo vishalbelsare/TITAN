@@ -1,0 +1,14 @@
+exit_enter:
+  type: definition
+  description: pairing of entry information based on exit class. Each exit type can only be represented once.
+  fields:
+    exit_class:
+      type: enum
+      class: exit
+    entry_class:
+      type: enum
+      class: enter
+  default:
+    death:
+      exit_class: death
+      entry_class: replace
